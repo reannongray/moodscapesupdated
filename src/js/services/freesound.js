@@ -5,16 +5,46 @@ export class FreesoundService {
         this.clientId = API_KEYS.freeSound.clientId;
         this.clientSecret = API_KEYS.freeSound.clientSecret;
         this.baseUrl = 'https://freesound.org/apiv2';
-        this.pageSize = 15;
     }
 
-    async searchSounds(query, page = 1) {
+    async getSoundsByMood(mood, isMusic = false) {
+        const moodSearchTerms = {
+            // Music moods
+            DeepSleep: 'sleep meditation soundtrack music',
+            LightSleep: 'soft ambient sleep music',
+            Restful: 'calm relaxation soundtrack',
+            Dreamy: 'ethereal soundtrack ambient music',
+            Productive: 'focus background music soundtrack',
+            Creative: 'inspirational background music',
+            Flow: 'flow state music soundtrack',
+            Joyful: 'uplifting happy soundtrack',
+            Energetic: 'energetic upbeat music',
+            Playful: 'playful happy soundtrack',
+            Grateful: 'positive uplifting soundtrack',
+            Calm: 'peaceful background music',
+            
+            // Ambient moods
+            Forest: 'forest nature ambient',
+            Rain: 'rain storm ambient',
+            Ocean: 'ocean waves sound',
+            Wind: 'wind nature ambient',
+            Cafe: 'cafe ambience atmosphere',
+            Traffic: 'city ambience atmosphere',
+            Park: 'park nature ambient',
+            Market: 'marketplace ambience',
+            Chimes: 'wind chimes sound',
+            Bowls: 'singing bowls meditation',
+            Crystal: 'crystal bowls meditation',
+            Bells: 'temple bells meditation'
+        };
+
         try {
+            const searchTerm = moodSearchTerms[mood] || (isMusic ? `${mood} music soundtrack` : `${mood} ambient`);
             const response = await fetch(
                 `${this.baseUrl}/search/text/?` + new URLSearchParams({
-                    query,
-                    page,
-                    page_size: this.pageSize,
+                    query: searchTerm,
+                    page: 1,
+                    page_size: 15,
                     fields: 'id,name,url,previews,duration,username',
                     token: this.clientSecret
                 })
@@ -33,43 +63,8 @@ export class FreesoundService {
                 previewUrl: sound.previews['preview-hq-mp3']
             }));
         } catch (error) {
-            console.error('Error searching Freesound:', error);
+            console.error('Error fetching from Freesound:', error);
             return [];
         }
-    }
-
-    async getSoundsByMood(mood) {
-        // Map moods to relevant search terms
-        const moodSearchTerms = {
-            // Music moods
-            DeepSleep: 'ambient sleep meditation',
-            LightSleep: 'gentle sleep sounds',
-            Restful: 'calming relaxation',
-            Dreamy: 'ethereal ambient',
-            Productive: 'focus background',
-            Determined: 'motivational ambient',
-            Creative: 'creative inspiration',
-            Flow: 'flow state music',
-            // ... other music moods ...
-
-            // Ambient moods
-            Forest: 'forest nature sounds',
-            Rain: 'rain ambient',
-            Ocean: 'ocean waves',
-            Wind: 'wind nature',
-            Cafe: 'coffee shop ambience',
-            Traffic: 'city traffic ambient',
-            Park: 'park nature sounds',
-            Market: 'marketplace ambience',
-            // ... other ambient moods ...
-        };
-
-        const searchTerm = moodSearchTerms[mood] || mood;
-        return await this.searchSounds(searchTerm);
-    }
-
-    // Helper method to get ambient sounds
-    async getAmbientSounds(category) {
-        return await this.searchSounds(`ambient ${category}`);
     }
 }
