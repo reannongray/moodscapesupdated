@@ -1,52 +1,40 @@
-import { FreesoundService } from './services/freesound.js';
+import { FreesoundService } from '../services/freesound.js';
 
-/**
- * AudioPlayer class handles all audio playback functionality for Moodscapes
- */
 export class AudioPlayer {
     constructor() {
-        // Core audio components stay the same
+        // Core audio components
         this.context = null;
         this.gainNode = null;
         this.analyser = null;
         this.audioSource = null;
 
-        // Add Freesound service
-        this.freesoundService = new FreesoundService();
-
-        // State tracking (simplified)
+        // State tracking
         this.isInitialized = false;
         this.currentTrackData = null;
-        this.currentMode = 'music';
+        this.currentMode = 'music';  // Default mode
         this.hasWarnedAboutAudio = false;
 
+        // Playlist management
+        this.playlist = [];
+        this.currentTrackIndex = 0;
+
         // Audio settings
-        this.crossfadeDuration = 2;
+        this.crossfadeDuration = 2; // seconds
         this.fadeInterval = null;
 
-        // Bind event handlers
+        // Bind methods for event listeners
         this.handleVolumeChange = this.handleVolumeChange.bind(this);
         this.handleProgressClick = this.handleProgressClick.bind(this);
         this.initializeAudioContext = this.initializeAudioContext.bind(this);
+        this.handlePlayPause = this.handlePlayPause.bind(this);
     }
 
     async initialize() {
         if (this.isInitialized) return true;
         
         try {
-            const initOnInteraction = async () => {
-                await this.initializeAudioContext();
-                document.removeEventListener('click', initOnInteraction);
-                document.removeEventListener('touchstart', initOnInteraction);
-                this.setupControls();
-            };
-
-            document.addEventListener('click', initOnInteraction, { once: true });
-            document.addEventListener('touchstart', initOnInteraction, { once: true });
-
-            // Initialize volume and controls
+            await this.initializeAudioContext();
             this.setupControls();
-            
             this.isInitialized = true;
             return true;
         } catch (error) {
@@ -73,10 +61,7 @@ export class AudioPlayer {
 
             return true;
         } catch (error) {
-            if (!this.hasWarnedAboutAudio) {
-                console.warn('Audio initialization deferred until user interaction');
-                this.hasWarnedAboutAudio = true;
-            }
+            console.error('Audio context initialization failed:', error);
             return false;
         }
     }
@@ -95,29 +80,34 @@ export class AudioPlayer {
             progressContainer.addEventListener('click', this.handleProgressClick);
         }
 
-        // Play button
+        // Play/Pause button
         const playBtn = document.getElementById('playBtn');
         if (playBtn) {
-            playBtn.addEventListener('click', () => {
-                if (this.audioSource) {
-                    if (this.context.state === 'suspended') {
-                        this.context.resume();
-                    }
-                    this.togglePlay();
-                }
-            });
+            playBtn.addEventListener('click', this.handlePlayPause);
+        }
+
+        // Next/Previous buttons
+        const nextBtn = document.getElementById('nextBtn');
+        if (nextBtn) {
+            nextBtn.addEventListener('click', () => this.nextTrack());
+        }
+
+        const prevBtn = document.getElementById('prevBtn');
+        if (prevBtn) {
+            prevBtn.addEventListener('click', () => this.previousTrack());
         }
     }
 
-    togglePlay() {
-        if (!this.audioSource) return;
-        
-        if (this.context.state === 'running') {
-            this.context.suspend();
-            this.updatePlayButton(false);
-        } else {
-            this.context.resume();
-            this.updatePlayButton(true);
+    async loadPlaylist(tracks) {
+        try {
+            this.playlist = tracks;
+            this.currentTrackIndex = 0;
+            if (tracks.length > 0) {
+                console.log('Loading first track from playlist');
+                await this.loadTrack(tracks[0]);
+            }
+        } catch (error) {
+            console.error('Error loading playlist:', error);
         }
     }
 
@@ -125,80 +115,70 @@ export class AudioPlayer {
         if (!this.context || !track.previewUrl) return false;
 
         try {
-            // Fade out current track if playing
             if (this.audioSource) {
                 await this.fadeOut();
             }
 
-            // Load and decode new track from Freesound
             const response = await fetch(track.previewUrl);
-            if (!response.ok) {
-                throw new Error('Failed to fetch audio');
-            }
+            if (!response.ok) throw new Error('Failed to fetch audio');
             
             const arrayBuffer = await response.arrayBuffer();
             const audioBuffer = await this.context.decodeAudioData(arrayBuffer);
             
-            // Stop and disconnect current source if exists
             if (this.audioSource) {
                 this.audioSource.stop();
                 this.audioSource.disconnect();
             }
 
-            // Create and connect new source
             this.audioSource = this.context.createBufferSource();
             this.audioSource.buffer = audioBuffer;
             this.audioSource.connect(this.gainNode);
             
-            // Update track info
             this.currentTrackData = track;
             this.updateTrackDisplay();
             
-            // Auto-play with fade in
             await this.play();
-            
             return true;
         } catch (error) {
             console.error('Error loading track:', error);
-            this.updateTrackDisplay({ name: 'Error loading track', artist: 'Please try again' });
             return false;
         }
     }
 
-    async loadMoodTracks(moods) {
-        try {
-            // Get tracks from Freesound based on moods
-            const tracks = [];
-            for (const mood of moods) {
-                const moodTracks = await this.freesoundService.getSoundsByMood(mood);
-                tracks.push(...moodTracks);
-            }
+    async nextTrack() {
+        if (this.playlist.length === 0) return;
+        this.currentTrackIndex = (this.currentTrackIndex + 1) % this.playlist.length;
+        await this.loadTrack(this.playlist[this.currentTrackIndex]);
+    }
 
-            if (tracks.length === 0) {
-                throw new Error('No tracks found for selected moods');
-            }
+    async previousTrack() {
+        if (this.playlist.length === 0) return;
+        this.currentTrackIndex = (this.currentTrackIndex - 1 + this.playlist.length) % this.playlist.length;
+        await this.loadTrack(this.playlist[this.currentTrackIndex]);
+    }
 
-            // Load the first track
-            await this.loadTrack(tracks[0]);
-            return true;
-        } catch (error) {
-            console.error('Error loading mood tracks:', error);
-            return false;
+    handleVolumeChange(e) {
+        const value = e.target.value;
+        this.setVolume(value / 100);
+    }
+
+    setVolume(value) {
+        if (this.gainNode) {
+            this.gainNode.gain.setValueAtTime(
+                Math.max(0, Math.min(1, value)),
+                this.context.currentTime
+            );
         }
     }
 
-    updateTrackDisplay(override = null) {
-        const trackData = override || this.currentTrackData;
-        if (!trackData) return;
-
-        const trackTitle = document.getElementById('currentTrack');
-        const artistName = document.getElementById('currentArtist');
-
-        if (trackTitle) {
-            trackTitle.textContent = trackData.name || 'Unknown Track';
-        }
-        if (artistName) {
-            artistName.textContent = trackData.artist || '';
+    async handlePlayPause() {
+        if (this.audioSource) {
+            if (this.context.state === 'running') {
+                await this.context.suspend();
+            } else {
+                await this.context.resume();
+            }
+            this.updatePlayButton(this.context.state === 'running');
         }
     }
 
@@ -224,6 +204,80 @@ export class AudioPlayer {
             this.audioSource.disconnect();
             this.audioSource = null;
             this.updatePlayButton(false);
+        }
+    }
+
+    handleProgressClick(e) {
+        if (!this.audioSource?.buffer) return;
+        
+        const rect = e.currentTarget.getBoundingClientRect();
+        const percent = (e.clientX - rect.left) / rect.width;
+        this.seekToPosition(percent);
+    }
+
+    seekToPosition(percent) {
+        if (!this.audioSource?.buffer) return;
+        
+        const duration = this.audioSource.buffer.duration;
+        const seekTime = duration * percent;
+        
+        this.stop();
+        this.audioSource.start(0, seekTime);
+        this.updateProgressBar(percent);
+    }
+
+    updateProgressBar(percent) {
+        const progressBar = document.getElementById('audioProgress');
+        if (progressBar) {
+            progressBar.value = percent * 100;
+        }
+
+        if (this.audioSource?.buffer) {
+            const duration = this.audioSource.buffer.duration;
+            const currentTime = duration * percent;
+            this.updateTimeDisplay(currentTime, duration);
+        }
+    }
+
+    updateTrackDisplay() {
+        if (!this.currentTrackData) return;
+
+        const trackTitle = document.getElementById('currentTrack');
+        const artistName = document.getElementById('currentArtist');
+
+        if (trackTitle) {
+            trackTitle.textContent = this.currentTrackData.name || 'Unknown Track';
+        }
+        if (artistName) {
+            artistName.textContent = this.currentTrackData.artist || '';
+        }
+    }
+
+    updateTimeDisplay(currentTime, duration) {
+        const currentTimeEl = document.getElementById('currentTime');
+        const totalTimeEl = document.getElementById('totalTime');
+
+        if (currentTimeEl) {
+            currentTimeEl.textContent = this.formatTime(currentTime);
+        }
+        if (totalTimeEl) {
+            totalTimeEl.textContent = this.formatTime(duration);
+        }
+    }
+
+    formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = Math.floor(seconds % 60);
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    updatePlayButton(isPlaying) {
+        const playBtn = document.getElementById('playBtn');
+        if (!playBtn) return;
+
+        const icon = playBtn.querySelector('i');
+        if (icon) {
+            icon.className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
         }
     }
 
@@ -268,103 +322,6 @@ export class AudioPlayer {
             }, stepTime);
         });
     }
-    handleVolumeChange(e) {
-        const value = e.target.value;
-        this.setVolume(value / 100);
-    }
-
-    setVolume(value) {
-        if (this.gainNode) {
-            this.gainNode.gain.setValueAtTime(
-                Math.max(0, Math.min(1, value)),
-                this.context.currentTime
-            );
-        }
-    }
-
-    handleProgressClick(e) {
-        if (!this.audioSource?.buffer) return;
-        
-        const rect = e.currentTarget.getBoundingClientRect();
-        const percent = (e.clientX - rect.left) / rect.width;
-        this.seekToPosition(percent);
-    }
-
-    seekToPosition(percent) {
-        if (!this.audioSource?.buffer) return;
-        
-        const duration = this.audioSource.buffer.duration;
-        const seekTime = duration * percent;
-        
-        this.stop();
-        this.audioSource.start(0, seekTime);
-        this.updateProgressBar(percent);
-    }
-
-    updateProgressBar(percent) {
-        const progressBar = document.getElementById('audioProgress');
-        if (progressBar) {
-            progressBar.value = percent * 100;
-        }
-
-        if (this.audioSource?.buffer) {
-            const duration = this.audioSource.buffer.duration;
-            const currentTime = duration * percent;
-            this.updateTimeDisplay(currentTime, duration);
-        }
-    }
-
-    updateTimeDisplay(currentTime, duration) {
-        const currentTimeEl = document.getElementById('currentTime');
-        const totalTimeEl = document.getElementById('totalTime');
-
-        if (currentTimeEl) {
-            currentTimeEl.textContent = this.formatTime(currentTime);
-        }
-        if (totalTimeEl) {
-            totalTimeEl.textContent = this.formatTime(duration);
-        }
-    }
-
-    formatTime(seconds) {
-        const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = Math.floor(seconds % 60);
-        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-    }
-
-    updatePlayButton(isPlaying) {
-        const playBtn = document.getElementById('playBtn');
-        if (!playBtn) return;
-
-        const icon = playBtn.querySelector('i');
-        if (icon) {
-            icon.className = isPlaying ? 'fas fa-pause' : 'fas fa-play';
-        }
-    }
-
-    switchMode(mode) {
-        try {
-            if (mode === this.currentMode) return true;
-
-            // Stop current playback if any
-            if (this.audioSource) {
-                this.stop();
-            }
-
-            this.currentMode = mode;
-
-            // Reset track info display
-            this.updateTrackDisplay({
-                name: 'Select a mood to begin',
-                artist: ''
-            });
-
-            return true;
-        } catch (error) {
-            console.error('Error switching audio mode:', error);
-            return false;
-        }
-    }
 
     destroy() {
         try {
@@ -380,7 +337,6 @@ export class AudioPlayer {
                 this.context.close();
             }
 
-            // Remove event listeners
             const volumeSlider = document.getElementById('volumeSlider');
             if (volumeSlider) {
                 volumeSlider.removeEventListener('input', this.handleVolumeChange);
@@ -393,7 +349,7 @@ export class AudioPlayer {
 
             const playBtn = document.getElementById('playBtn');
             if (playBtn) {
-                playBtn.removeEventListener('click', this.togglePlay);
+                playBtn.removeEventListener('click', this.handlePlayPause);
             }
 
             this.isInitialized = false;
