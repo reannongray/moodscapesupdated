@@ -2,7 +2,7 @@
 export const API_KEYS = {
     freeSound: {
         clientId: 'wAoFYxl4qT4rBWVRgeZj',
-        clientSecret: process.env.FREESOUND_CLIENT_SECRET || 'your-freesound-client-secret'
+        clientSecret: '1KUxLhfc1dMkeN3oJmAQUdaIJjpM0ubNUC8JqKyR'  // We'll move this to env later
     }
 };
 
