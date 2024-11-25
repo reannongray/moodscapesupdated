@@ -1,6 +1,9 @@
 import { AppState } from './utils.js';
 import { StarFieldManager } from './starfield.js';
 import { MoodManager } from './moods.js';
+import { AudioPlayer } from './components/player.js';
+import { AudioVisualizer } from './visualizer.js';
+import { FreesoundService } from './services/freesound.js';
 
 class App {
     constructor() {
@@ -17,26 +20,33 @@ class App {
         try {
             console.log('Starting initialization...');
 
-            // Debug starfield
+            // Initialize StarField
             console.log('Creating StarFieldManager...');
             const starField = new StarFieldManager();
-            console.log('Initializing StarField...');
             const starFieldSuccess = await starField.initialize();
-            console.log('StarField initialization:', starFieldSuccess ? 'success' : 'failed');
             this.components.set('starField', starField);
 
-            // Debug state
+            // Initialize Audio Components
+            console.log('Initializing Audio Components...');
+            window.audioPlayer = new AudioPlayer();
+            await window.audioPlayer.initialize();
+            
+            window.visualizer = new AudioVisualizer();
+            await window.visualizer.initialize(window.audioPlayer.context, window.audioPlayer.analyser);
+            
+            window.freesound = new FreesoundService();
+
+            // Initialize State and UI
             console.log('Creating AppState...');
             window.appState = new AppState();
-            console.log('AppState created');
-
-            // Debug mood manager
+            
             console.log('Creating MoodManager...');
             window.moodManager = new MoodManager();
-            console.log('MoodManager created');
 
-            // Debug UI render
-            console.log('Rendering initial UI...');
+            // Set up mood selection handler
+            this.setupMoodHandler();
+            
+            // Render initial UI
             this.renderInitialUI();
 
             this.initialized = true;
@@ -46,6 +56,31 @@ class App {
             console.error('Initialization failed:', error);
             return false;
         }
+    }
+    setupMoodHandler() {
+        // Listen for mood changes
+        window.addEventListener('moodsChanged', async (event) => {
+            const selectedMoods = event.detail.moods;
+            if (selectedMoods.length > 0) {
+                try {
+                    // Get current mode
+                    const isMusic = window.appState.currentMode === 'music';
+                    
+                    // Fetch sounds for selected mood
+                    const sounds = await window.freesound.getSoundsByMood(selectedMoods[0], isMusic);
+                    
+                    if (sounds && sounds.length > 0) {
+                        // Load sounds into player
+                        await window.audioPlayer.loadPlaylist(sounds);
+                        
+                        // Start visualizer
+                        window.visualizer.start();
+                    }
+                } catch (error) {
+                    console.error('Error handling mood selection:', error);
+                }
+            }
+        });
     }
 
     renderInitialUI() {
@@ -127,4 +162,3 @@ if (document.readyState === 'loading') {
 }
 
 export default App;
-
