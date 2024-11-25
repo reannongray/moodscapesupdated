@@ -20,11 +20,11 @@ class App {
         try {
             console.log('Starting initialization...');
 
-            // Initialize StarField
-            console.log('Creating StarFieldManager...');
-            const starField = new StarFieldManager();
-            const starFieldSuccess = await starField.initialize();
-            this.components.set('starField', starField);
+        // Initialize StarField
+        console.log('Creating StarFieldManager...');
+        const starField = new StarFieldManager();
+        await starField.initialize();
+        this.components.set('starField', starField);
 
             // Initialize Audio Components
             console.log('Initializing Audio Components...');

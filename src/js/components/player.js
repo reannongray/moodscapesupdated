@@ -1,5 +1,3 @@
-import { FreesoundService } from '../services/freesound.js';
-
 export class AudioPlayer {
     constructor() {
         // Core audio components
