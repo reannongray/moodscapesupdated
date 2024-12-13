@@ -12,6 +12,6 @@
     "dotenv": "^16.3.1"
   },
   "devDependencies": {
-    "vite": "^5.0.10"
+    "vite": "^5.4.11"
   }
- }
+}
