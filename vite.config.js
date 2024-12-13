@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
 export default defineConfig({
-  base: process.env.NODE_ENV === 'production' ? '/moodscapesupdated/' : '/',
+  base: '/moodscapesupdated/', // Base URL for GitHub Pages
   server: {
     port: 3000,
     open: true
