@@ -24,10 +24,14 @@ jobs:
           cache: 'npm'
       
       - name: Install dependencies
-        run: npm install
+        run: |
+          npm install
+          npm install -g vite
       
       - name: Build
-        run: npm run build
+        run: |
+          chmod +x ./node_modules/.bin/vite
+          npm run build
       
       - name: Modify index.html
         run: |
