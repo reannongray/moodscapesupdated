@@ -29,6 +29,10 @@ jobs:
       - name: Build
         run: npm run build
       
+      - name: Modify index.html
+        run: |
+          sed -i 's|/moodscapesupdated/assets/|assets/|g' dist/index.html
+      
       - name: Setup Pages
         uses: actions/configure-pages@v4
       
